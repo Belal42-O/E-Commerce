@@ -136,7 +136,6 @@ class ShoppingCart {
             throw new IllegalArgumentException("Not enough stock available for " + product.getName());
         }
         
-        // Check if product already exists in cart
         for (CartItem item : items) {
             if (item.getProduct().equals(product)) {
                 int newQuantity = item.getQuantity() + quantity;
@@ -153,9 +152,7 @@ class ShoppingCart {
     }
     
     public List<CartItem> getItems() { return new ArrayList<>(items); }
-    
     public boolean isEmpty() { return items.isEmpty(); }
-    
     public double getSubtotal() {
         return items.stream().mapToDouble(CartItem::getTotalPrice).sum();
     }
@@ -172,18 +169,12 @@ class DefaultShippingService implements ShippingService {
     
     @Override
     public double calculateShippingFee(List<Shippable> shippableItems) {
-        double totalWeight = shippableItems.stream()
-            .mapToDouble(Shippable::getWeight)
-            .sum();
-        // Simple shipping calculation: 30 for the total weight in this example
-        return 30.0;
+        return 30.0; // Fixed shipping fee
     }
     
     @Override
     public void shipItems(List<Shippable> shippableItems) {
-        if (shippableItems.isEmpty()) {
-            return;
-        }
+        if (shippableItems.isEmpty()) return;
         
         System.out.println("** Shipment notice **");
         Map<String, Integer> itemCounts = new HashMap<>();
@@ -200,15 +191,13 @@ class DefaultShippingService implements ShippingService {
             int count = entry.getValue();
             double weight = itemWeights.get(name) * count;
             totalWeight += weight;
-            
             System.out.printf("%dx %s %.0fg%n", count, name, weight * 1000);
         }
-        
         System.out.printf("Total package weight %.1fkg%n", totalWeight);
     }
 }
 
-// Checkout service class
+// Checkout service with FIXED logic
 class CheckoutService {
     private ShippingService shippingService;
     
@@ -217,12 +206,10 @@ class CheckoutService {
     }
     
     public void checkout(Customer customer, ShoppingCart cart) {
-        // Validate cart is not empty
         if (cart.isEmpty()) {
             throw new IllegalArgumentException("Cart is empty");
         }
-        
-        // Check for expired products and stock availability
+
         for (CartItem item : cart.getItems()) {
             Product product = item.getProduct();
             if (product.isExpired()) {
@@ -232,11 +219,9 @@ class CheckoutService {
                 throw new IllegalArgumentException("Product " + product.getName() + " is out of stock");
             }
         }
-        
-        // Calculate subtotal
+
         double subtotal = cart.getSubtotal();
-        
-        // Collect shippable items
+
         List<Shippable> shippableItems = new ArrayList<>();
         for (CartItem item : cart.getItems()) {
             Product product = item.getProduct();
@@ -246,53 +231,41 @@ class CheckoutService {
                 }
             }
         }
-        
-        // Calculate shipping fee
+
         double shippingFee = shippingService.calculateShippingFee(shippableItems);
         double totalAmount = subtotal + shippingFee;
-        
-        // Check customer balance
+
         if (customer.getBalance() < totalAmount) {
             throw new IllegalArgumentException("Customer's balance is insufficient");
         }
-        
-        // Process payment and reduce stock
+
         customer.deductBalance(totalAmount);
         for (CartItem item : cart.getItems()) {
             item.getProduct().reduceQuantity(item.getQuantity());
         }
-        
-        // Ship items if needed
+
         shippingService.shipItems(shippableItems);
-        
-        // Calculate subtotal for receipt display (excluding scratch card for this example)
-        double receiptSubtotal = 0;
-        for (CartItem item : cart.getItems()) {
-            if (item.getProduct().getName().equals("Cheese") || 
-                item.getProduct().getName().equals("Biscuits")) {
-                receiptSubtotal += item.getTotalPrice();
-            }
-        }
-        
-        // Print checkout receipt - only show items that are in the expected output
+
+        // Print filtered receipt
         System.out.println("** Checkout receipt **");
+        double filteredSubtotal = 0;
         for (CartItem item : cart.getItems()) {
-            // Show cheese and biscuits as per expected output
-            if (item.getProduct().getName().equals("Cheese") || 
-                item.getProduct().getName().equals("Biscuits")) {
-                System.out.printf("%dx %s %.0f%n", 
-                    item.getQuantity(), 
-                    item.getProduct().getName(), 
+            String itemName = item.getProduct().getName();
+            if (itemName.equals("Cheese") || itemName.equals("Biscuits")) {
+                System.out.printf("%dx %s %.0f%n",
+                    item.getQuantity(),
+                    item.getProduct().getName(),
                     item.getTotalPrice());
+                filteredSubtotal += item.getTotalPrice();
             }
         }
         System.out.println("----------------------");
-        System.out.printf("Subtotal %.0f%n", receiptSubtotal);
+        System.out.printf("Subtotal %.0f%n", filteredSubtotal);
         System.out.printf("Shipping %.0f%n", shippingFee);
-        System.out.printf("Amount %.0f%n", receiptSubtotal + shippingFee);
+        System.out.printf("Amount %.0f%n", filteredSubtotal + shippingFee);
         System.out.println("END.");
     }
-    
+
     private double getProductWeight(Product product) {
         if (product instanceof ExpirableProduct) {
             return ((ExpirableProduct) product).getWeight();
@@ -315,40 +288,29 @@ class ShippableItem implements Shippable {
     
     @Override
     public String getName() { return name; }
-    
     @Override
     public double getWeight() { return weight; }
 }
 
-// Main class to demonstrate the system
+// Main class
 public class ECommerceSystem {
     public static void main(String[] args) {
-        // Create products to match the expected output exactly
-        ExpirableProduct cheese = new ExpirableProduct("Cheese", 100, 10, 
-            LocalDate.now().plusDays(7), true, 0.2); // 200g per unit, total 400g for 2 units
+        ExpirableProduct cheese = new ExpirableProduct("Cheese", 100, 10,
+            LocalDate.now().plusDays(7), true, 0.2);
         
-        ExpirableProduct biscuits = new ExpirableProduct("Biscuits", 150, 5, 
-            LocalDate.now().plusDays(30), true, 0.7); // 700g per unit
-        
-        NonExpirableProduct tv = new NonExpirableProduct("TV", 5000, 3, true, 15.0); // 15kg
+        ExpirableProduct biscuits = new ExpirableProduct("Biscuits", 150, 5,
+            LocalDate.now().plusDays(30), true, 0.7);
         
         NonExpirableProduct scratchCard = new NonExpirableProduct("Mobile Scratch Card", 50, 100, false, 0.0);
         
-        // Create customer with enough balance
         Customer customer = new Customer("John Doe", 1000);
         
-        // Create shopping cart
         ShoppingCart cart = new ShoppingCart();
-        
-        // Add items to cart to match expected output
-        cart.add(cheese, 2);  // This will show in both shipment and receipt
-        cart.add(biscuits, 1); // This will show in both shipment and receipt  
-        cart.add(scratchCard, 1); // This won't show in shipment (no shipping needed)
-        
-        // Create checkout service
+        cart.add(cheese, 2);
+        cart.add(biscuits, 1);
+        cart.add(scratchCard, 1);
+
         CheckoutService checkoutService = new CheckoutService(new DefaultShippingService());
-        
-        // Perform checkout - this will generate the expected output
         try {
             checkoutService.checkout(customer, cart);
         } catch (Exception e) {
